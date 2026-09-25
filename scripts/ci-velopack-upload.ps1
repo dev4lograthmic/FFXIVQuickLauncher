@@ -1,25 +1,23 @@
 <#
 .SYNOPSIS
-    XIVLauncher Velopack build + R2 upload script.
+    XIVLauncher Velopack build + GitHub Releases publish script.
     Called by CI workflow on tag push.
 
 .DESCRIPTION
-    1. Download previous release via Worker (for delta generation)
+    1. Download previous release feed via GitHub Releases (for delta generation)
     2. Pack new release via vpk
-    3. Pull remote releases.win.json from Worker, merge with local
-    4. Trim to latest N versions, delete stale nupkgs
-    5. Upload new nupkgs + releases.win.json + RELEASES to R2
+    3. Pull remote releases.win.json from GitHub, merge with local
+    4. Trim to latest N versions
+    5. Create a draft GitHub Release, attach nupkgs + merged feed, then publish as latest
 
 .ENVIRONMENT
-    CLOUDFLARE_API_TOKEN  - Cloudflare API Token (R2 read/write)
-    CLOUDFLARE_ACCOUNT_ID - Cloudflare Account ID
-    GITHUB_REF            - Git ref that triggered the workflow
+    GH_TOKEN      - GitHub Token (read/write releases)
+    GITHUB_REF    - Git ref that triggered the workflow
+    GITHUB_REPOSITORY - Repository full name (owner/repo)
 #>
 
 param(
     [string]$Channel          = 'win',
-    [string]$WorkerUrl        = 'https://xl-dis.atmoomen.top',
-    [string]$BucketName       = 'xivlauncher-distribute',
     [string]$PackId           = 'XIVLauncherCN',
     [string]$PackDir          = '.\bin\win-x64',
     [string]$OutputDir        = '.\Releases',
@@ -38,6 +36,12 @@ function Write-Step([string]$Msg) {
     Write-Host ">>> $Msg"
 }
 
+if (-not $env:GITHUB_REPOSITORY) { throw 'GITHUB_REPOSITORY is required' }
+
+# ---- Derived GitHub URLs ----
+$feedBaseUrl  = "https://github.com/$env:GITHUB_REPOSITORY/releases/latest/download"
+$assetBaseUrl = "https://github.com/$env:GITHUB_REPOSITORY/releases/download"
+
 # ---- Extract version ----
 $refver = $env:GITHUB_REF -replace '.*/'
 Write-Step "Release version: $refver"
@@ -46,15 +50,20 @@ Write-Step "Release version: $refver"
 if (-not (Get-Command vpk -ErrorAction SilentlyContinue)) {
     dotnet tool install -g vpk
 }
-if (-not (Get-Command wrangler -ErrorAction SilentlyContinue)) {
-    npm install -g wrangler
-}
 
 New-Item -ItemType Directory -Path $OutputDir -Force | Out-Null
 
-# ---- 1. Download previous release from Worker (for delta) ----
+# ---- 1. Download previous release feed (for delta) ----
 Write-Step 'Downloading previous release feed...'
-vpk download http --url $WorkerUrl --channel $Channel --timeout 30
+try {
+    vpk download http --url $feedBaseUrl --channel $Channel --timeout 30
+    if ($LASTEXITCODE -ne 0) {
+        Write-Warning "  No previous release feed available (first release?), continuing without delta."
+    }
+}
+catch {
+    Write-Warning "  Failed to download previous release feed (first release?), continuing without delta. $_"
+}
 
 # ---- 2. Pack new release ----
 Write-Step "Packing release $refver..."
@@ -79,11 +88,11 @@ $localJson   = Get-Content -LiteralPath "$OutputDir\releases.win.json" -Encoding
 $localAssets = @($localJson.Assets)
 Write-Step "Local new entries: $($localAssets.Count)"
 
-# ---- 4. Pull remote releases.win.json from Worker ----
+# ---- 4. Pull remote releases.win.json from GitHub ----
 $remoteAssets = @()
 try {
     $cacheBust = [DateTimeOffset]::UtcNow.ToUnixTimeSeconds()
-    $remoteObj = Invoke-RestMethod -Uri "$WorkerUrl/releases.win.json?t=$cacheBust" -ErrorAction Stop
+    $remoteObj = Invoke-RestMethod -Uri "$feedBaseUrl/releases.win.json?t=$cacheBust" -ErrorAction Stop
     $remoteAssets = @($remoteObj.Assets)
     Write-Step "Remote existing entries: $($remoteAssets.Count)"
 }
@@ -91,9 +100,12 @@ catch {
     Write-Host "  No remote releases.win.json yet (first release). ($_)"
 }
 
-# ---- 5. Merge (dedup by FileName, local wins) ----
+# ---- 5. Normalize FileName to absolute GitHub URLs + merge (dedup by URL, local wins) ----
 $merged = @{}
 foreach ($a in ($remoteAssets + $localAssets)) {
+    if ($a.FileName -notmatch '^https?://') {
+        $a.FileName = "$assetBaseUrl/$($a.Version)/$($a.FileName)"
+    }
     $merged[$a.FileName] = $a
 }
 $mergedList = @($merged.Values)
@@ -112,84 +124,57 @@ foreach ($v in $keepVersions) { $keepSet[$v] = $true }
 
 Write-Step "Keeping versions ($($keepVersions.Count)): $($keepVersions -join ', ')"
 
-$keepAssets       = @($mergedList | Where-Object { $v = $_.Version -replace '^v', ''; $keepSet.ContainsKey($v) })
-$keepSetFileNames = @{}
-foreach ($a in $keepAssets) { $keepSetFileNames[$a.FileName] = $true }
-
-# ---- 7. Delete stale nupkgs ----
-$deleteAssets = @($mergedList | Where-Object { -not $keepSetFileNames.ContainsKey($_.FileName) })
-foreach ($a in $deleteAssets) {
-    Write-Host "  Deleting stale nupkg: $($a.FileName)"
-    npx wrangler r2 object delete "$BucketName/$($a.FileName)" --remote
-}
-
-# ---- 8. Upload new nupkgs (1yr immutable) ----
-Get-ChildItem "$OutputDir\*.nupkg" -File | ForEach-Object {
-    Write-Host "  Uploading nupkg: $($_.Name)"
-    npx wrangler r2 object put "$BucketName/$($_.Name)" `
-        --remote --file $_.FullName `
-        --content-type 'application/octet-stream'
-    if ($LASTEXITCODE -ne 0) { throw "Upload failed: $($_.Name)" }
-}
-
-# ---- 9. Build and upload releases.win.json (5min cache) ----
-Write-Step 'Uploading releases.win.json...'
+$keepAssets = @($mergedList | Where-Object { $v = $_.Version -replace '^v', ''; $keepSet.ContainsKey($v) })
 $sortedKeep = $keepAssets | Sort-Object { [Version]($_.Version -replace '^v', '') } -Descending
+
+# ---- 7. Build merged feed (correct asset file names) ----
+$feedDir = "$OutputDir\feed"
+New-Item -ItemType Directory -Path $feedDir -Force | Out-Null
+
 $releaseJson = @{ Assets = @($sortedKeep) } | ConvertTo-Json -Depth 3
-$releaseJsonPath = "$OutputDir\releases.win.merged.json"
+$releaseJsonPath = "$feedDir\releases.win.json"
 $releaseJson | Set-Content -LiteralPath $releaseJsonPath -Encoding utf8NoBOM
-npx wrangler r2 object put "$BucketName/releases.win.json" `
-    --remote --file $releaseJsonPath `
-    --content-type 'application/json; charset=utf-8'
-if ($LASTEXITCODE -ne 0) { throw 'Upload of releases.win.json failed' }
 
-# ---- 10. Build and upload RELEASES (5min cache) ----
-Write-Step 'Uploading RELEASES...'
 $releasesContent = ($sortedKeep | ForEach-Object { "$($_.SHA1) $($_.FileName) $($_.Size)" }) -join "`n"
-$releasesPath = "$OutputDir\RELEASES.merged"
+$releasesPath = "$feedDir\RELEASES"
 $releasesContent | Set-Content -LiteralPath $releasesPath -Encoding utf8NoBOM -NoNewline
-npx wrangler r2 object put "$BucketName/RELEASES" `
-    --remote --file $releasesPath `
-    --content-type 'text/plain; charset=utf-8'
-if ($LASTEXITCODE -ne 0) { throw 'Upload of RELEASES failed' }
 
-Write-Host "Done: $($keepAssets.Count) nupkgs, $($keepVersions.Count) versions."
+Write-Host "Merged feed: $($keepAssets.Count) nupkgs, $($keepVersions.Count) versions."
 
-# ---- 11. Create GitHub Release (for changelog visibility and backfill source) ----
-Write-Step 'Creating GitHub Release...'
+# ---- 8. Create draft GitHub Release (attach this version's binaries) ----
+Write-Step 'Creating draft GitHub Release...'
 $portableZip = Get-ChildItem "$OutputDir\*-Portable.zip" -File | Select-Object -First 1
 $releaseNotes = Get-Content -LiteralPath $ReleaseNotesPath -Encoding utf8 -Raw
 
 $ghArgs = @(
     'release', 'create', $refver,
+    '--draft',
     '--title', "Release $refver",
     '--notes', $releaseNotes
 )
 if ($portableZip) {
     $ghArgs += $portableZip.FullName
 }
-# Attach nupkg files for this version only
 Get-ChildItem "$OutputDir\*$refver*.nupkg" -File | ForEach-Object {
     $ghArgs += $_.FullName
 }
 
 gh @ghArgs --repo $env:GITHUB_REPOSITORY
 if ($LASTEXITCODE -ne 0) {
-    Write-Warning "GitHub Release creation failed (exit=$LASTEXITCODE), continuing."
+    Write-Warning "  GitHub Release creation failed (may already exist from a previous run), continuing. (exit=$LASTEXITCODE)"
 }
 else {
-    Write-Host "  GitHub Release created: $refver"
-
-    # ---- 11a. Upload single-version releases.win.json ----
-    Write-Host "  Uploading releases.win.json..."
-    gh release upload $refver "$OutputDir\releases.win.json" --repo $env:GITHUB_REPOSITORY
-    if ($LASTEXITCODE -ne 0) { Write-Warning "Upload of releases.win.json to GitHub Release failed (exit=$LASTEXITCODE)" }
-
-    # ---- 11b. Build and upload single-version RELEASES ----
-    Write-Host "  Uploading RELEASES..."
-    $localReleasesContent = ($localAssets | ForEach-Object { "$($_.SHA1) $($_.FileName) $($_.Size)" }) -join "`n"
-    $localReleasesPath = "$OutputDir\RELEASES"
-    $localReleasesContent | Set-Content -LiteralPath $localReleasesPath -Encoding utf8NoBOM -NoNewline
-    gh release upload $refver $localReleasesPath --repo $env:GITHUB_REPOSITORY
-    if ($LASTEXITCODE -ne 0) { Write-Warning "Upload of RELEASES to GitHub Release failed (exit=$LASTEXITCODE)" }
+    Write-Host "  Draft release created: $refver"
 }
+
+# ---- 9. Upload merged feed to the release ----
+Write-Step 'Uploading merged feed...'
+gh release upload $refver $releaseJsonPath $releasesPath --repo $env:GITHUB_REPOSITORY --clobber
+if ($LASTEXITCODE -ne 0) { throw 'Upload of merged feed failed' }
+
+# ---- 10. Publish as latest ----
+Write-Step 'Publishing release as latest...'
+gh release edit $refver --draft=false --latest --repo $env:GITHUB_REPOSITORY
+if ($LASTEXITCODE -ne 0) { throw 'Publishing release failed' }
+
+Write-Host "Published: $refver ($($keepAssets.Count) nupkgs, $($keepVersions.Count) versions)"
