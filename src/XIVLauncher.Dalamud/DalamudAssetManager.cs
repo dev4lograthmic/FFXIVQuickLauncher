@@ -5,7 +5,6 @@ using System.Text.Json.Serialization;
 using Serilog;
 using XIVLauncher.Common.Constant;
 using XIVLauncher.Common.Http;
-using XIVLauncher.Common.Network;
 using XIVLauncher.Common.Util;
 
 namespace XIVLauncher.Dalamud;
@@ -14,37 +13,21 @@ internal static class DalamudAssetManager
 {
     public static async Task<(DirectoryInfo AssetDir, int Version)> EnsureAssets
     (
-        DalamudUpdater             updater,
-        DirectoryInfo              baseDir,
-        INetworkEnvironmentService networkEnvironmentService
+        DalamudUpdater updater,
+        DirectoryInfo  baseDir
     )
     {
-        var networkEnvironmentTask = networkEnvironmentService.GetCurrentAsync();
-
         using var client = XLHttpClientFactory.Create(TimeSpan.FromSeconds(10), 50, System.Net.DecompressionMethods.None);
         client.Timeout = TimeSpan.FromMinutes(4);
 
         Log.Verbose("[DASSET] 开始检查 Dalamud 资源文件更新");
 
-        // 1. 根据网络区域获取远端版本号与清单
-        var networkEnvironment = await networkEnvironmentTask.ConfigureAwait(false);
-        var versionURL         = Links.DALAMUD_ASSET_DISTRIBUTE_R2_VERSION_URL;
-        var assetBaseURL       = Links.DALAMUD_ASSET_DISTRIBUTE_R2_BASE_URL;
-
-        Log.Information
-        (
-            "[DASSET] 网络区域 {Region}, 使用 Dalamud 资源发行源 {AssetBaseURL}",
-            networkEnvironment.Region,
-            assetBaseURL
-        );
-
-        var versionText = await client.GetStringAsync(versionURL).ConfigureAwait(false);
-        var version     = int.Parse(versionText.Trim());
+        // 1. 从 GitHub raw 获取远端资源清单与版本号
+        var manifestURL = Links.DALAMUD_ASSET_MANIFEST_URL;
+        var manifest    = JsonSerializer.Deserialize<AssetInfo>(await client.GetStringAsync(manifestURL).ConfigureAwait(false), new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
+        var version     = manifest.Version;
 
         Log.Information("[DASSET] 远端资源版本: {Version}", version);
-
-        var manifestURL = $"{assetBaseURL}/{version}/assetCN.json";
-        var manifest    = JsonSerializer.Deserialize<AssetInfo>(await client.GetStringAsync(manifestURL), new JsonSerializerOptions { PropertyNameCaseInsensitive = true })!;
 
         var currentDir = new DirectoryInfo(Path.Combine(baseDir.FullName, version.ToString()));
         var devDir     = new DirectoryInfo(Path.Combine(baseDir.FullName, "dev"));
@@ -119,8 +102,9 @@ internal static class DalamudAssetManager
             }
 
             // 入列并行下载
-            var assetName   = $"files/{entry.FileName}";
-            var downloadURL = $"{assetBaseURL}/{version}/{assetName}";
+            var downloadURL = string.IsNullOrWhiteSpace(entry.Url)
+                                  ? $"{Links.DALAMUD_ASSET_RAW_BASE_URL}/{entry.FileName}"
+                                  : entry.Url;
             Directory.CreateDirectory(Path.GetDirectoryName(filePath)!);
             downloadTasks.Add(DownloadAsset(updater, downloadURL, filePath, entry.FileName));
         }
@@ -262,6 +246,9 @@ internal static class DalamudAssetManager
 
         public class Asset
         {
+            [JsonPropertyName("url")]
+            public string? Url { get; set; }
+
             [JsonPropertyName("fileName")]
             public string FileName { get; set; } = null!;
 

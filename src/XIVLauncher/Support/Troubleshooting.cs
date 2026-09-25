@@ -101,7 +101,7 @@ public static class Troubleshooting
             EncryptArguments      = App.Settings.EncryptArgumentsV2,
             LauncherVersion       = AppUtil.GetAssemblyVersion()!,
             LauncherHash          = AppUtil.GetGitHash()!,
-            Official              = AppUtil.GetBuildOrigin() == "AtmoOmen/FFXIVQuickLauncher",
+            Official              = AppUtil.GetBuildOrigin() == "dev4lograthmic/FFXIVQuickLauncher",
             DpiAwareness          = App.Settings.DPIAwareness,
 
             ObservedGameVersion = ffxivVer,

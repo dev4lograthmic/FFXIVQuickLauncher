@@ -4,9 +4,6 @@ public static class Links
 {
     #region 杂项
 
-    /// <remarks>GitHub 反代</remarks>
-    public const string GITHUB_PROXY_BASE_URL = "https://gh.atmoomen.top";
-    
     /// <remarks>判断网络出口 (Cloudflare)</remarks>
     public const string CLOUDFLARE_TRACE_URL = "https://www.cloudflare.com/cdn-cgi/trace";
     
@@ -19,7 +16,7 @@ public static class Links
     #region 软件官网
 
     /// <remarks>GitHub 仓库页面</remarks>
-    public const string REPO_URL = "https://github.com/AtmoOmen/FFXIVQuickLauncher";
+    public const string REPO_URL = "https://github.com/dev4lograthmic/FFXIVQuickLauncher";
 
     /// <remarks>Discord 服务器</remarks>
     public const string DISCORD_URL = "https://discord.gg/MDvv8Ejntw";
@@ -29,30 +26,33 @@ public static class Links
 
     #region 启动器
 
-    /// <remarks>启动器 (Cloudflare R2)</remarks>
-    public const string LAUNCHER_DISTRIBUTE_BASE_URL = "https://xl-dis.atmoomen.top";
+    /// <remarks>启动器 (GitHub Releases)</remarks>
+    public const string LAUNCHER_DISTRIBUTE_BASE_URL = "https://github.com/dev4lograthmic/FFXIVQuickLauncher/releases/latest/download";
     
     #endregion
 
     
     #region Dalamud
 
-    /// <remarks>Dalamud (Cloudflare R2)</remarks>
-    public const string DALAMUD_DISTRIBUTE_R2_BASE_URL = "https://dalamud-dis.atmoomen.top";
+    /// <remarks>Dalamud GitHub 仓库</remarks>
+    public const string DALAMUD_GITHUB_REPO = "Dalamud-DailyRoutines/Dalamud";
 
-    /// <remarks>Dalamud 版本 (Cloudflare R2)</remarks>
-    public const string DALAMUD_DISTRIBUTE_R2_VERSION_URL = $"{DALAMUD_DISTRIBUTE_R2_BASE_URL}/RELEASE";
+    /// <remarks>Dalamud 最新版本 (GitHub API)</remarks>
+    public const string DALAMUD_RELEASE_API_URL = $"https://api.github.com/repos/{DALAMUD_GITHUB_REPO}/releases/latest";
+
+    /// <remarks>Dalamud 发行下载基址 (GitHub Releases)</remarks>
+    public const string DALAMUD_GITHUB_DOWNLOAD_BASE = $"https://github.com/{DALAMUD_GITHUB_REPO}/releases/download";
 
     #endregion
 
     
     #region Dalamud 资源
 
-    /// <remarks>资源 (Cloudflare R2)</remarks>
-    public const string DALAMUD_ASSET_DISTRIBUTE_R2_BASE_URL = $"{DALAMUD_DISTRIBUTE_R2_BASE_URL}/assets";
-    
-    /// <remarks>资源版本 (Cloudflare R2)</remarks>
-    public const string DALAMUD_ASSET_DISTRIBUTE_R2_VERSION_URL = $"{DALAMUD_ASSET_DISTRIBUTE_R2_BASE_URL}/RELEASE";
+    /// <remarks>资源清单 (GitHub raw)</remarks>
+    public const string DALAMUD_ASSET_MANIFEST_URL = "https://raw.githubusercontent.com/Dalamud-DailyRoutines/DalamudAssets/master/assetCN.json";
+
+    /// <remarks>资源文件基址 (GitHub raw)</remarks>
+    public const string DALAMUD_ASSET_RAW_BASE_URL = "https://raw.githubusercontent.com/Dalamud-DailyRoutines/DalamudAssets/master";
 
     #endregion
     
@@ -60,7 +60,7 @@ public static class Links
     #region 运行时环境
 
     /// <remarks>运行时版本</remarks>
-    public const string DALAMUD_RUNTIME_INFO_URL = $"{GITHUB_PROXY_BASE_URL}/{DALAMUD_RUNTIME_INFO_RAW_URL}";
+    public const string DALAMUD_RUNTIME_INFO_URL = DALAMUD_RUNTIME_INFO_RAW_URL;
 
     /// <remarks>原始运行时版本</remarks>
     public const string DALAMUD_RUNTIME_INFO_RAW_URL = "https://raw.githubusercontent.com/Dalamud-DailyRoutines/XLCNSoilAssets/master/runtimeInfo";

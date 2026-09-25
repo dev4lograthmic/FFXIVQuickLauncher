@@ -1,11 +1,11 @@
 using System.Collections.Concurrent;
 using System.Net;
 using System.Security.Cryptography;
+using System.Text.Json;
 using Newtonsoft.Json;
 using Serilog;
 using XIVLauncher.Common.Constant;
 using XIVLauncher.Common.Http;
-using XIVLauncher.Common.Network;
 using XIVLauncher.Common.Runtime;
 using XIVLauncher.Common.Util;
 
@@ -58,25 +58,22 @@ public class DalamudUpdater
     private readonly DirectoryInfo addonDirectory;
     private readonly DirectoryInfo assetDirectory;
 
-    private readonly HttpClient                 httpClient;
-    private readonly INetworkEnvironmentService networkEnvironmentService;
+    private readonly HttpClient httpClient;
 
-    private string releaseBaseURL = Links.DALAMUD_DISTRIBUTE_R2_BASE_URL;
+    private string releaseBaseURL = Links.DALAMUD_GITHUB_DOWNLOAD_BASE;
 
     public DalamudUpdater
     (
-        DirectoryInfo              addonDirectory,
-        DirectoryInfo              runtimeDirectory,
-        DirectoryInfo              assetDirectory,
-        INetworkEnvironmentService? networkEnvironmentService = null,
-        HttpClient?                 httpClient                 = null
+        DirectoryInfo addonDirectory,
+        DirectoryInfo runtimeDirectory,
+        DirectoryInfo assetDirectory,
+        HttpClient?   httpClient = null
     )
     {
-        this.addonDirectory            = addonDirectory;
-        Runtime                        = runtimeDirectory;
-        this.assetDirectory            = assetDirectory;
-        this.networkEnvironmentService = networkEnvironmentService ?? NetworkEnvironmentService.Shared;
-        this.httpClient                = httpClient ?? XLHttpClientFactory.Create(TimeSpan.FromSeconds(10), 50, DecompressionMethods.All);
+        this.addonDirectory = addonDirectory;
+        Runtime             = runtimeDirectory;
+        this.assetDirectory = assetDirectory;
+        this.httpClient     = httpClient ?? XLHttpClientFactory.Create(TimeSpan.FromSeconds(10), 50, DecompressionMethods.All);
 
         if (httpClient == null)
             this.httpClient.DefaultRequestHeaders.UserAgent.ParseAdd("XIVLauncherCN");
@@ -266,7 +263,7 @@ public class DalamudUpdater
 
         try
         {
-            var assetResult = await DalamudAssetManager.EnsureAssets(this, assetDirectory, networkEnvironmentService).ConfigureAwait(true);
+            var assetResult = await DalamudAssetManager.EnsureAssets(this, assetDirectory).ConfigureAwait(true);
             AssetDirectory = assetResult.AssetDir;
             Log.Information("[DUPDATE] 资源文件验证完成: {Path}", AssetDirectory.FullName);
         }
@@ -344,27 +341,23 @@ public class DalamudUpdater
 
     public async Task GetDalamudVersionInfoAsync()
     {
-        var networkEnvironmentTask = networkEnvironmentService.GetCurrentAsync();
         runtimeVersion = await DotNetRuntimeManager.GetLatestVersionAsync(httpClient).ConfigureAwait(false);
 
         Log.Information("[DUPDATE] 获取到远端 Dalamud 运行时版本: {0}", runtimeVersion);
 
-        var networkEnvironment = await networkEnvironmentTask.ConfigureAwait(false);
-        var versionURL         = Links.DALAMUD_DISTRIBUTE_R2_VERSION_URL;
-        releaseBaseURL = Links.DALAMUD_DISTRIBUTE_R2_BASE_URL;
+        releaseBaseURL = Links.DALAMUD_GITHUB_DOWNLOAD_BASE;
 
-        Log.Information
-        (
-            "[DUPDATE] 网络区域 {Region}, 使用 Dalamud 发行源 {ReleaseBaseURL}",
-            networkEnvironment.Region,
-            releaseBaseURL
-        );
+        using var releaseRequest = new HttpRequestMessage(HttpMethod.Get, Links.DALAMUD_RELEASE_API_URL);
+        releaseRequest.Headers.Accept.ParseAdd("application/vnd.github+json");
 
-        var releaseText = await httpClient.GetStringAsync(versionURL).ConfigureAwait(false);
-        var version     = releaseText.Trim();
+        using var releaseResponse = await httpClient.SendAsync(releaseRequest).ConfigureAwait(false);
+        await releaseResponse.EnsureSuccessWithDiagnosticsAsync().ConfigureAwait(false);
+
+        using var releaseDocument = JsonDocument.Parse(await releaseResponse.Content.ReadAsStringAsync().ConfigureAwait(false));
+        var       version         = releaseDocument.RootElement.GetProperty("tag_name").GetString();
 
         if (string.IsNullOrWhiteSpace(version))
-            throw new InvalidDataException($"[DUPDATE] 发行源返回空版本信息: {versionURL}");
+            throw new InvalidDataException($"[DUPDATE] 发行源返回空版本信息: {Links.DALAMUD_RELEASE_API_URL}");
         Version = version;
         Log.Information("[DUPDATE] 获取到发行版本: {Version}", Version);
 

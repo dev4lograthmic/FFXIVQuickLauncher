@@ -4,10 +4,10 @@
     <id>XIVLauncherCN</id>
     <version>$version$</version>
     <title>XIVLauncherCN</title>
-    <authors>ottercorp</authors>
-    <owners>ottercorp</owners>
+    <authors>dev4lograthmic</authors>
+    <owners>dev4lograthmic</owners>
     <requireLicenseAcceptance>false</requireLicenseAcceptance>
-    <projectUrl>https://github.com/ottercorp/FFXIVQuickLauncher</projectUrl>
+    <projectUrl>https://github.com/dev4lograthmic/FFXIVQuickLauncher</projectUrl>
     <iconUrl>https://aonyx.ffxiv.wang/static/dalamud_icon.ico</iconUrl>
     <description>最终幻想14国服第三方启动器</description>
   </metadata>
