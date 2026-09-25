@@ -1,12 +1,14 @@
+> **注意**：本项目是 [AtmoOmen/FFXIVQuickLauncher](https://github.com/AtmoOmen/FFXIVQuickLauncher) 的 fork，已移除对原仓库自建服务器资源的依赖——GitHub 反代、Cloudflare R2 分发（启动器与 Dalamud 本体/资源）等均已去除，下载与更新改为直接使用 GitHub Releases 与 raw 源。
+
 <div align="center">
   <h1>XIVLauncherCN (Soil)</h1>
   <img src="src/XIVLauncher/Resources/logo.png" alt="XIVLauncherCN (Soil) Logo" width="180" />
 
 
   <p>
-    <a href="https://github.com/AtmoOmen/FFXIVQuickLauncher/actions"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/AtmoOmen/FFXIVQuickLauncher/ci-workflow.yml?branch=CN&label=%E6%9E%84%E5%BB%BA&style=for-the-badge" /></a>
-    <a href="https://github.com/AtmoOmen/FFXIVQuickLauncher/releases/latest"><img alt="Latest Release" src="https://img.shields.io/github/v/release/AtmoOmen/FFXIVQuickLauncher?display_name=release&label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC&style=for-the-badge" /></a>
-    <a href="https://github.com/AtmoOmen/FFXIVQuickLauncher/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/AtmoOmen/FFXIVQuickLauncher/total?label=%E7%B4%AF%E8%AE%A1%E4%B8%8B%E8%BD%BD&style=for-the-badge" /></a>
+    <a href="https://github.com/dev4lograthmic/FFXIVQuickLauncher/actions"><img alt="CI" src="https://img.shields.io/github/actions/workflow/status/dev4lograthmic/FFXIVQuickLauncher/ci-workflow.yml?branch=CN&label=%E6%9E%84%E5%BB%BA&style=for-the-badge" /></a>
+    <a href="https://github.com/dev4lograthmic/FFXIVQuickLauncher/releases/latest"><img alt="Latest Release" src="https://img.shields.io/github/v/release/dev4lograthmic/FFXIVQuickLauncher?display_name=release&label=%E6%9C%80%E6%96%B0%E7%89%88%E6%9C%AC&style=for-the-badge" /></a>
+    <a href="https://github.com/dev4lograthmic/FFXIVQuickLauncher/releases"><img alt="Downloads" src="https://img.shields.io/github/downloads/dev4lograthmic/FFXIVQuickLauncher/total?label=%E7%B4%AF%E8%AE%A1%E4%B8%8B%E8%BD%BD&style=for-the-badge" /></a>
     <a href="https://discord.gg/dailyroutines"><img alt="Discord" src="https://img.shields.io/badge/Discord-5865F2?logo=discord&logoColor=white&style=for-the-badge" /></a>
   </p>
 
@@ -22,6 +24,7 @@
 <p align="center">
   <img src="misc/screenshot.png" alt="XIVLauncherCN (Soil) 截图" width="960" />
 </p>
+
 
 ## 分支差异
 
